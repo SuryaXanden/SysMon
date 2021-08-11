@@ -1,6 +1,7 @@
 from flask import Flask
 import psutil
 import json
+import os
 
 
 def fetchSystemDetails():
@@ -37,6 +38,9 @@ def fetchSystemDetails():
 
     _diskUsage = []
     for disk in psutil.disk_partitions():
+        if os.name == 'nt':
+            if 'cdrom' in disk.opts or disk.fstype == '':
+                continue
         diskDetails = psutil.disk_usage(disk.mountpoint)
         _diskUsage.append({
             "tab": f"Disk {disk.mountpoint}",
