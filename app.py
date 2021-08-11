@@ -1,7 +1,14 @@
-from flask import Flask
+from flask import Flask, request
 import psutil
 import json
+from subprocess import Popen
 
+ACTIONS = {
+    "shutdown": ['shutdown','-s','-f','-t','0'],
+    "hibernate": ['shutdown','-h'],
+    "logoff": ['logoff'],
+    "reboot": ['shutdown','-r','-f','-t','0']
+}
 
 def fetchSystemDetails():
     systemDetails = []
@@ -54,10 +61,16 @@ def fetchSystemDetails():
     return systemDetails
 
 
+def mapActionToCommand(action):
+    return ACTIONS.get(action)
+    # return "echo hello"
+
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
-
+def execCmd(endpoint):
+    Popen(mapActionToCommand(endpoint.lower()))
+    return f'''{endpoint.upper()} : Command executed successfully'''
 @app.route('/')
 def index():
     systemDetails = fetchSystemDetails()
@@ -66,8 +79,28 @@ def index():
     <title>SysMon</title>
     <meta http-equiv="refresh" content="30">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <a href="/Hibernate" target="_blank">Hibernate</a>|
+    <a href="/Logout" target="_blank">Logout</a>|
+    <a href="/Shutdown" target="_blank">Shutdown</a>|
+    <a href="/Reboot" target="_blank">Reboot</a>
+    <br>
     <pre>{details}</pre>
     '''
 
+@app.route('/Shutdown')
+def Shutdown():
+    return execCmd(request.endpoint)
+
+@app.route('/Hibernate')
+def Hibernate():
+    return execCmd(request.endpoint)
+
+@app.route('/Logout')
+def Logout():
+    return execCmd(request.endpoint)
+
+@app.route('/Reboot')
+def Reboot():
+    return execCmd(request.endpoint)
 
 app.run(host="0.0.0.0", port=80, debug=True, threaded=True)
