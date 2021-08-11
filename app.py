@@ -1,6 +1,7 @@
 from flask import Flask, request
 import psutil
 import json
+import os
 from subprocess import Popen
 
 ACTIONS = {
@@ -44,6 +45,9 @@ def fetchSystemDetails():
 
     _diskUsage = []
     for disk in psutil.disk_partitions():
+        if os.name == 'nt':
+            if 'cdrom' in disk.opts or disk.fstype == '':
+                continue
         diskDetails = psutil.disk_usage(disk.mountpoint)
         _diskUsage.append({
             "tab": f"Disk {disk.mountpoint}",
