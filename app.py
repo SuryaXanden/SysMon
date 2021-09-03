@@ -1,15 +1,22 @@
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import psutil
 import json
-import os
 from subprocess import Popen
 
 ACTIONS = {
-    "shutdown": ['shutdown','-s','-f','-t','0'],
-    "hibernate": ['shutdown','-h'],
+    "shutdown": ['shutdown', '-s', '-f', '-t', '0'],
+    "hibernate": ['shutdown', '-h'],
     "logoff": ['logoff'],
-    "reboot": ['shutdown','-r','-f','-t','0']
+    "reboot": ['shutdown', '-r', '-f', '-t', '0'],
+    "lock": ['rundll32', 'user32.dll,LockWorkStation'],
+    "off": ["powershell", "-Command", '(Add-Type -MemberDefinition "[DllImport(""user32.dll"")]`npublic static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);" -Name "Win32SendMessage" -Namespace Win32Functions -PassThru)::SendMessage(0xffff, 0x0112, 0xF170, 2)']
 }
+# constants
+HOST = "0.0.0.0"
+PORT = 80
+DEBUG = True
+THREADED = True
+
 
 def fetchSystemDetails():
     systemDetails = []
@@ -36,8 +43,10 @@ def fetchSystemDetails():
     _cpu["tab"] = "CPU"
     _cpu["cpuCores"] = psutil.cpu_count(logical=False)
     _cpu["cpuLogicalCores"] = psutil.cpu_count()
-    _cpu["cpuUsageTotal%"] = round(sum(psutil.cpu_percent(1, True))/8, 2)
-    _cpu["cpuUsage%"] = psutil.cpu_percent(1, True)
+    cpuUsage = psutil.cpu_percent(1, True)
+    _cpu["cpuUsageTotal%"] = round(
+        (sum(cpuUsage)/(100*_cpu["cpuCores"]))*100, 2)
+    _cpu["cpuUsage%"] = cpuUsage
     # cpusUsage as text
     # _cpu["cpuUsage"] = ", ".join(f"{cu}%"for cu in psutil.cpu_percent(1, True)).strip()
 
@@ -45,9 +54,6 @@ def fetchSystemDetails():
 
     _diskUsage = []
     for disk in psutil.disk_partitions():
-        if os.name == 'nt':
-            if 'cdrom' in disk.opts or disk.fstype == '':
-                continue
         diskDetails = psutil.disk_usage(disk.mountpoint)
         _diskUsage.append({
             "tab": f"Disk {disk.mountpoint}",
@@ -59,52 +65,72 @@ def fetchSystemDetails():
         })
     systemDetails += _diskUsage
 
-    # with open("stats.json",'w') as f:
-    #     systemDetails = json.dump(systemDetails,f,indent="\t")
-
     return systemDetails
 
 
 def mapActionToCommand(action):
     return ACTIONS.get(action)
-    # return "echo hello"
 
-app = Flask(__name__)
-app.config['JSON_SORT_KEYS'] = False
 
 def execCmd(endpoint):
     Popen(mapActionToCommand(endpoint.lower()))
-    return f'''{endpoint.upper()} : Command executed successfully'''
-@app.route('/')
-def index():
-    systemDetails = fetchSystemDetails()
-    details = json.dumps(systemDetails, indent="  ")
-    return f'''
-    <title>SysMon</title>
-    <meta http-equiv="refresh" content="30">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <a href="/Hibernate" target="_blank">Hibernate</a>|
-    <a href="/Logout" target="_blank">Logout</a>|
-    <a href="/Shutdown" target="_blank">Shutdown</a>|
-    <a href="/Reboot" target="_blank">Reboot</a>
-    <br>
-    <pre>{details}</pre>
-    '''
+    return f'''{endpoint.upper()} command is executed successfully'''
 
-@app.route('/Shutdown')
-def Shutdown():
-    return execCmd(request.endpoint)
 
-@app.route('/Hibernate')
-def Hibernate():
-    return execCmd(request.endpoint)
+if __name__ == "__main__":
+    app = Flask(__name__)
+    app.config['JSON_SORT_KEYS'] = False
 
-@app.route('/Logout')
-def Logout():
-    return execCmd(request.endpoint)
+    @app.route('/')
+    def index():
+        systemDetails = fetchSystemDetails()
+        details = json.dumps(systemDetails, indent="  ")
+        return f'''
+        <title>SysMon</title>
+        <meta http-equiv="refresh" content="30">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <pre>{details}</pre>
+        '''
 
-@app.route('/Reboot')
-def Reboot():
-    return execCmd(request.endpoint)
+    @app.route('/json')
+    def _json():
+        return jsonify(fetchSystemDetails())
 
-app.run(host="0.0.0.0", port=80, debug=True, threaded=True)
+    @app.route('/Shutdown')
+    @app.route('/Hibernate')
+    @app.route('/Logout')
+    @app.route('/Reboot')
+    @app.route('/Lock')
+    @app.route('/Off')
+    def actions():
+        execCmd((request.path)[1:])
+        return '''
+        <script>
+        window.onbeforeunload = e => {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+        </script>
+        ''' + f"""{(request.path)[1:].upper()} executed successfully."""
+
+    @app.route('/remote')
+    def remote():
+        systemDetails = fetchSystemDetails()
+        details = json.dumps(systemDetails, indent="  ")
+        return f'''
+        <title>SysMon</title>
+        <meta http-equiv="refresh" content="30">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        |<a href="/Off" target="_blank"><b>&#x260D; </b>TOS</a>
+        |<a href="/Lock" target="_blank"><b>&#x262F; </b>Lock</a>
+        |<a href="/Hibernate" target="_blank"><b>&#x273E; </b>Hibernate</a>
+        <br>
+        |<a href="/Logout" target="_blank"><b>&#x26E2; </b>Logout</a>
+        |<a href="/Shutdown" target="_blank"><b>&#x2620; </b>Shutdown</a>
+        |<a href="/Reboot" target="_blank"><b>&#x267A; </b>Reboot</a>
+        <br>
+        <br>
+        <pre>{details}</pre>
+        '''
+
+    app.run(host=HOST, port=PORT, debug=DEBUG, threaded=THREADED)
