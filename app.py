@@ -1,12 +1,13 @@
 from flask import Flask, request, jsonify
 import psutil
 import json
+import os
 from subprocess import Popen
 
 ACTIONS = {
     "shutdown": ['shutdown', '-s', '-f', '-t', '0'],
     "hibernate": ['shutdown', '-h'],
-    "logoff": ['logoff'],
+    "logout": ['logoff'],
     "reboot": ['shutdown', '-r', '-f', '-t', '0'],
     "lock": ['rundll32', 'user32.dll,LockWorkStation'],
     "off": ["powershell", "-Command", '(Add-Type -MemberDefinition "[DllImport(""user32.dll"")]`npublic static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);" -Name "Win32SendMessage" -Namespace Win32Functions -PassThru)::SendMessage(0xffff, 0x0112, 0xF170, 2)']
@@ -54,6 +55,9 @@ def fetchSystemDetails():
 
     _diskUsage = []
     for disk in psutil.disk_partitions():
+        if os.name == 'nt':
+            if 'cdrom' in disk.opts or disk.fstype == '':
+                continue
         diskDetails = psutil.disk_usage(disk.mountpoint)
         _diskUsage.append({
             "tab": f"Disk {disk.mountpoint}",
