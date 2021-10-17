@@ -1,16 +1,20 @@
-from flask import Flask, request, jsonify
-import psutil
+import uvicorn
 import json
+import psutil
 from subprocess import Popen
 import platform
 
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+# from fastapi.staticfiles import StaticFiles
+# from fastapi.templating import Jinja2Templates
+
 # constants
 HOST = "0.0.0.0"
-PORT = 80
-DEBUG = True
-THREADED = True
+PORT = 81
+RELOAD = True
 
-#logic to check if OS is Windows
+# logic to check if OS is Windows
 IS_WINDOWS = platform.system() == "Windows"
 
 
@@ -98,33 +102,34 @@ def execCmd(endpoint):
 
 
 if __name__ == "__main__":
-    app = Flask(__name__)
-    app.config['JSON_SORT_KEYS'] = False
+    app = FastAPI()
 
-    @app.route('/')
+    @app.get('/', response_class=HTMLResponse)
     def index():
         systemDetails = fetchSystemDetails()
-        details = json.dumps(systemDetails, indent="  ")
-        return f'''
+        details = json.dumps(systemDetails, indent="  ", sort_keys=False)
+        return HTMLResponse(content=f'''
         <title>SysMon</title>
         <meta http-equiv="refresh" content="30">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <pre>{details}</pre>
-        '''
+        ''')
 
-    @app.route('/json')
+    @app.post('/json')
     def _json():
-        return jsonify(fetchSystemDetails())
+        return JSONResponse(fetchSystemDetails())
 
-    @app.route('/Shutdown')
-    @app.route('/Hibernate')
-    @app.route('/Logout')
-    @app.route('/Reboot')
-    @app.route('/Lock')
-    @app.route('/Off')
-    def actions():
-        command = request.path[1:]
-        return '''
+    @app.get('/Shutdown', response_class=HTMLResponse)
+    @app.get('/Hibernate', response_class=HTMLResponse)
+    @app.get('/Logout', response_class=HTMLResponse)
+    @app.get('/Reboot', response_class=HTMLResponse)
+    @app.get('/Lock', response_class=HTMLResponse)
+    @app.get('/Off', response_class=HTMLResponse)
+    def actions(request: Request):
+        command = request.url.path[1:]
+        print({"command": command})
+
+        return HTMLResponse(content='''
         <script>
         window.onbeforeunload = e => {
             e.preventDefault();
@@ -132,13 +137,13 @@ if __name__ == "__main__":
         };''' + f"""
         alert('{execCmd(command)}');
         window.history.back();
-        </script>"""
+        </script>""")
 
-    @app.route('/remote')
+    @app.get('/remote', response_class=HTMLResponse)
     def remote():
         systemDetails = fetchSystemDetails()
         details = json.dumps(systemDetails, indent="  ")
-        return f'''
+        return HTMLResponse(content=f'''
         <title>SysMon</title>
         <meta http-equiv="refresh" content="30">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -152,6 +157,6 @@ if __name__ == "__main__":
         <br>
         <br>
         <pre>{details}</pre>
-        '''
+        ''')
 
-    app.run(host=HOST, port=PORT, debug=DEBUG, threaded=THREADED)
+    uvicorn.run(app, host=HOST, port=PORT)
